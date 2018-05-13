@@ -1,0 +1,96 @@
+<div class="container" id="mainContainer">
+    <h1 class="text-center">Welcome to ChitChat</h1>
+    <hr>
+    <div class="row">
+        <div class="col-md-10">
+            <h4 id="lblUserInfo">{{ $parent.user.username }} ({{$parent.user.email}})</h4>
+        </div>
+        <div class="col-md-2"><input type="button" class="btn btn-primary form-control" value="Leave Chat" id="btnLeaveChat" ng-click="$parent.leaveChat()"></div>
+    </div>
+    <hr>
+    <div class="row">
+        <div class="col-md-12" id="successDiv"></div>
+        <div class="col-md-8">
+            <!-- <textarea class="form-control" rows="15" id="txtConversation" readonly="" style="resize: none;background-color: #FFFFFF;"></textarea> -->
+            <!-- <div class="input-group">
+                <input type="text" class="form-control" ng-keyup="$parent.sendInstantMessageOnEnter($event)" id="txtInstantMessage" autocomplete="off" placeholder="Type Your Message Here..." ng-model="$parent.instantMessage">
+                <span class="input-group-btn">
+                <button class="btn btn-default" type="button" id="btnSend" ng-click="$parent.sendInstantMessage()">Send</button>
+                </span>
+            </div> -->
+            <div ng-include="'conversationSection.htm'" style="height: 314px;">
+                
+            </div>
+            <div class="input-group">
+                <input type="text" class="form-control" ng-keyup="$parent.sendInstantMessageOnEnter($event)" id="txtInstantMessage" autocomplete="off" placeholder="Type Your Message Here..." ng-model="$parent.instantMessage">
+                <span class="input-group-btn">
+                <button class="btn btn-default" type="button" id="btnSend" ng-click="$parent.sendInstantMessage()">Send</button>
+                </span>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div>
+                <select class="form-control" size="19" id="slctUsers"></select>
+                <br>
+            </div>
+            <div id="modalContainer">
+                <div class="modal fade" id="sendEmailModal" tabindex="-1" role="dialog" aria-labelledby="myModalLabel">
+                    <div class="modal-dialog" role="document">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <button type="button" class="close" ng-click="$parent.closeModal()" aria-label="Close"><span aria-hidden="true">×</span></button>
+                                <h4 class="modal-title" id="myModalLabel">Send Email</h4>
+                            </div>
+                            <div class="modal-body">
+                                <div class="col-md-12" id="alertDiv" ng-show="$parent.emailSent">{{$parent.emailSentMessage}}</div>
+                                <form>
+                                    <div class="form-group">
+                                        <label for="txtEmailTo">To</label>
+                                        <input type="email" class="form-control" id="txtEmailTo" placeholder="To Email" ng-model="$parent.toEmail">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="txtEmailFrom">From</label>
+                                        <input type="email" class="form-control" id="txtEmailFrom" placeholder="From Email" ng-model="$parent.email">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="txtSubject">Subject</label>
+                                        <input type="text" class="form-control" id="txtSubject" placeholder="Email Subject" ng-model="$parent.emailSubject">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="txtBody">Email Body</label>
+                                        <textarea id="txtBody" class="form-control" rows="3" ng-model="$parent.emailBody" style="resize: none;"></textarea>
+                                    </div>
+                                </form>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-default" ng-click="$parent.closeModal()">Close</button>
+                                <button type="button" ng-click="$parent.sendEmail()" class="btn btn-primary">Send Email</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal fade bs-example-modal-lg" tabindex="-1" role="dialog" aria-labelledby="mySmallModalLabel" id="uploadFileModal">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">×</span></button>
+                            <h4 class="modal-title" id="mySmallModalLabel">Small modal</h4>
+                        </div>
+                        <div class="modal-body">
+                            <div class="form-group">
+                                <label for="exampleInputFile">File input</label>
+                                <input type="file" id="fileinput">
+                            </div>
+                            <button ng-click="$parent.sendFile()">Send File</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#uploadFileModal">Small modal</button>
+
+        </div>
+    </div>
+</div>

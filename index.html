@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>ChitChat</title>
+	<script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.6.4/angular.min.js"></script>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+	<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+	<link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+	<div ng-app="ChitChatApp" ng-controller="ChitChatController">
+		<div class="container" id="mainContainer" ng-include="currentPageUrl">
+			
+		</div>
+	</div>
+
+
+	<script type="text/javascript">
+
+		var app = angular.module('ChitChatApp', []);
+
+		app.controller('ChitChatController', function($scope, $http) {
+			
+			////////////////////
+			//Model Definition//
+			////////////////////
+			
+			// Cette fonction permet de formatter la date
+			function convertDateTime(varDate) {
+				var monthNames = [
+					'January',
+					'February',
+					'March',
+					'April',
+					'May',
+					'June',
+					'July',
+					'August',
+					'September',
+					'October',
+					'November',
+					'December'
+				];
+				var newDate = new Date(varDate);
+				var day = newDate.getDate();
+				var monthIndex = newDate.getMonth();
+				var year = newDate.getFullYear();
+				var hour = newDate.getHours();
+				var minutes = newDate.getMinutes();
+				var strMin = minutes.toString();
+				if (strMin.length < 2) {
+					strMin = "0" + strMin;
+				}
+
+				var dateStr = day + " " + monthNames[monthIndex] + " " + year + " " + hour + ":" + strMin;
+				return dateStr;
+			}
+
+			// Cette fonction joue un son quand un nouveau utilisateur joinderai le chat
+			function playSoundJoin() {
+				var audio = new Audio('sounds/join.wav');
+				audio.play();
+			}
+
+			// Cette fonction joue un son quand un nouveau utilisateur sort du chat
+			function playSoundLeft() {
+				var audio = new Audio('sounds/leave.wav');
+				audio.play();
+			}
+
+			// Cette fonction joue un son quand un nouveau message instantane apparait
+			function playSoundMessage() {
+				var audio = new Audio('sounds/msg.wav');
+				audio.play();
+			}
+
+			// Classe User
+			function User(username, email) {
+				this.username = username;
+				this.email = email;
+			}
+
+			// Fonction de la Class User - toString
+			User.prototype.toString = function () {
+				// Fonction de la Class User - toString
+				return this.username + " (" + this.email + ")";
+			};
+
+			// Classe Message
+			function Message(from, text) {
+				this.from = from;
+				this.text = text;
+				this.date = new Date();
+			}
+
+			// Fonction de la Class Message - toJson
+			Message.prototype.toJson = function () {
+				var json = {
+					"from": this.from,
+					"text": this.text,
+					"date": this.date
+				};
+				return json;
+			};
+
+			// Classe StatusMessage (Join - Left)
+			// Ce message est affiché dans la partie droite de la page du Chat
+			function StatusMessage(username, email, type) {
+				this.username = username;
+				this.email = email;
+				this.type = type; // Joined ou Left
+			}
+
+			// Fonction de la Class StatusMessage - toJson
+			StatusMessage.prototype.toJson = function () {
+				var json = {
+					"username": this.username,
+					"email": this.email,
+					"type": this.type
+				};
+				return json;
+			};
+
+			//Classe NotificationMsg
+			function NotificationMsg(message, type) {
+				this.message = message;
+				this.type = type; // joined ou left ou new_msg  
+			}
+			////////////////////////
+			//END Model Definition//
+			////////////////////////
+
+			var wsPublisher = null;
+			var wsSubscriber = null;
+			var socketUrl = 'wss://api.scriptrapps.io/';
+
+			$scope.user = null;
+			var url = 'https://api.scriptrapps.io/chitchat';
+
+			$scope.validCridentials = true;
+			$scope.username = '';
+			$scope.email = '';
+			$scope.currentPageUrl = 'login.htm';
+			// var token = "";
+
+			var socketToken = 'TjQ0REMzQTkyMTpzY3JpcHRyOkVEMjNGRUQwM0FFMkJERTIwMjI2MTgzMzVFNjU0RERE';
+
+			$scope.emailSent = false;
+
+			$scope.joinChat = function () {
+				$scope.validCridentials = true;
+				var urlJoin = url + '/join';
+
+				var params = 'username=' + $scope.username + '&email=' + $scope.email + '&auth_token=UzIyQTgwRjc2Ng==';
+				if (checkData($scope.username, $scope.email)) {
+					$http.post(urlJoin + '?' + params).then(function successCallback(response){
+						var objJson = response.data;
+						var result = objJson.response.result;
+						var errorMessage = result.errorDetail;
+						if (errorMessage === undefined) {
+							token = result;
+							$scope.user = new User($scope.username, $scope.email);
+							$scope.currentPageUrl = 'chat.htm';
+							$scope.listUsers();
+							subscribe();
+						} else {
+							$scope.errorMessage = errorMessage;
+							$scope.validCridentials = false;
+						}
+
+					}, function errorCallback(){
+
+					});
+				}
+			}
+
+			$scope.listUsers = function () {
+
+				var urlListUsers = url + "/listUsers?auth_token=" + token;
+				$http.get(urlListUsers).then(function successCallback(response){
+					var objJson = response.data;
+					var result = objJson.response.result;
+					var errorMessage = result.errorDetail;
+					if (errorMessage === undefined) {
+						var users = result;
+						var usersList = [];
+						// Comme le résultat de la requête n’est pas une liste mais un objet qui a le format suivant :
+						// "result": { "username": "email@live.com", "karim": "karim@scriptr.io"}
+						// On doit parcourir l’objet et d’ajouter chaque utilisateur a une liste
+						for (var key in users) {
+							if (users.hasOwnProperty(key)) {
+								var innerUser = new User(key, users[key]);
+								if (key === $scope.username) {
+									// do nothing
+								} else {
+									usersList.push(innerUser);
+								}
+							}
+						}
+						// On ajoute les utilisateur a l'element de type "Select"
+						var slctUsers = document.getElementById('slctUsers');
+						for (var i = 0; i < usersList.length; i++) {
+							var option = document.createElement("option");
+							option.innerHTML = usersList[i].username;
+							option.id = usersList[i].email;
+							// Ces attributs sert à ouvrir la boite de dialogue qui envoie des emails 
+							// Donc si l'utilisateur est le même, il ne pourrait pas ouvrir cette boite de dialogue
+							if (usersList[i].email !== $scope.user.email) {
+								option.setAttribute("data-toggle", "modal");
+								option.setAttribute("data-target", "#sendEmailModal");
+							}
+							option.onclick = onOptionClickListener;
+							slctUsers.appendChild(option);
+						}
+					} else {
+						$scope.errorMessage = errorMessage;
+					}
+
+				}, function errorCallback(){
+
+				});
+			}
+
+			function checkData (username, email) {
+				if ($scope.email === '') {
+					$scope.validCridentials = false;
+					$scope.errorMessage = 'Please add a valid email';
+				}
+				if ($scope.username === '') {
+					$scope.validCridentials = false;
+					$scope.errorMessage = 'Please add a valid username';
+				}
+				return $scope.validCridentials;
+			}
+
+			function onOptionClickListener(option) {
+				$scope.toEmail = option.target.id;
+				$scope.emailSubject = '';
+				$scope.emailBody = '';
+				$scope.$apply();
+			}
+
+			$scope.closeModal = function() {
+				$scope.emailSent = false;
+				$('#sendEmailModal').modal('hide');
+			}
+
+			// Cette fonction permet d'envoyer un Email
+			$scope.sendEmail = function() {
+
+				var urlSendMail = url + "/sendMail?auth_token=" + token;
+
+				if (checkData($scope.username, $scope.email)) {
+
+					var strMail = {"from": $scope.email, "to": $scope.toEmail, "subject": $scope.emailSubject, "body": $scope.emailBody};
+					var jsonMail = JSON.stringify(strMail);
+
+					$http.post(urlSendMail, strMail).then(function successCallback(response){
+						
+						var objJson = response.data;
+						var result = objJson.response.result;
+						var errorMessage = result.errorDetail;
+						if (errorMessage === undefined) {
+							$scope.emailSubject = "";
+							$scope.emailBody = "";
+							$scope.emailSentMessage = "Mail was sent successfully";
+							$scope.closeModal();
+						} else {
+							$scope.errorMessage = errorMessage;
+							$scope.validCridentials = false;
+						}
+
+					}, function errorCallback(){
+
+					});
+				}
+			}
+
+			$scope.leaveChat = function() {
+				var urlLeave = url + "/leave";
+				var params = "username=" + $scope.username + "&auth_token=" + token;
+				$http.post(urlLeave + '?' + params).then(function successCallback(response){
+					var objJson = response.data;
+					var result = objJson.response.result;
+					var errorMessage = result.errorDetail;
+					if (errorMessage === undefined) {
+						var statusMessage = new StatusMessage($scope.user.username, $scope.user.email, "Left");
+						publishMessage(statusMessage);
+						$scope.user = null;
+						// sendPublishMessage(statusMessage);
+						$scope.currentPageUrl = 'login.htm';
+					} else {
+						$scope.errorMessage = errorMessage;
+					}
+
+				}, function errorCallback(){
+
+				});
+			}
+
+			// Cette fonction permet d'ouvrir le websocket de type "subscriber"
+			function subscribe() {
+				socketUrl += socketToken;
+				if(wsSubscriber==null){
+					wsSubscriber = new WebSocket(socketUrl);
+				}else {
+					sendSucscibeMessage();
+				}
+				// wsSubscriber = new WebSocket(socketUrl);
+				wsSubscriber.onopen = function () {
+					sendSucscibeMessage();
+				};
+
+				wsSubscriber.onclose = function (obj) {
+					var statusMessage = new StatusMessage($scope.user.username, $scope.user.email, "Left");
+					publishMessage(statusMessage);
+				};
+
+				wsSubscriber.onmessage = function (event) {
+					//Received Broadcast Message
+					var msg = JSON.parse(event.data);
+					if ((msg.from) && (!msg.fileName)) {
+						addReceivedMessage(msg);
+					} else if ((msg.from) && (msg.fileName)) {
+						addReceivedFileMessage(msg);
+					} else if ((msg.email) && ($scope.user!=null)) {
+						addStatusMessage(msg);
+					}
+				};
+
+				wsSubscriber.onerror = function (error) {
+					// console.log("Error on Publisher websocket " + error);
+				};
+			}
+
+			// cette fonction publie un message 
+			function publishMessage(objMsg) {
+				if(wsPublisher==null){
+					wsPublisher = new WebSocket(socketUrl);
+				}else{
+					sendPublishMessage(objMsg);
+				}
+				// wsPublisher = new WebSocket(socketUrl);
+				wsPublisher.onopen = function () {
+					sendPublishMessage(objMsg);
+				};
+
+				wsPublisher.onclose = function (obj) {
+					console.log("Publisher closed " + JSON.stringify(obj));
+				};
+
+				wsPublisher.onmessage = function (event) {
+					console.log("Publisher Message");
+				};
+
+				wsPublisher.onerror = function (error) {
+					console.log("Publisher Error");
+				};
+			}
+
+			function sendPublishMessage(objMsg){
+				var serverMessage = {
+					"method": "Publish",
+					"params": {
+						"channel": "pubsub_private",
+						"message": JSON.stringify(objMsg.toJson())
+					}
+				};
+				wsPublisher.send(JSON.stringify(serverMessage));
+			}
+
+			function sendSucscibeMessage(){
+				console.log("user joined conv");
+				var msg = {"method": "Subscribe", "params": {"channel": "pubsub_private"}};
+				wsSubscriber.send(JSON.stringify(msg));
+
+				var statusMessage = new StatusMessage($scope.user.username, $scope.user.email, "Joined");
+				publishMessage(statusMessage);
+			}
+
+
+			function addReceivedMessage(message) {
+
+                // var txtConversation = document.getElementById("txtConversation");
+
+                // txtConversation.value += message.from + ": " + message.text + " \t " + convertDateTime(message.date) + "\n\n";
+                // txtConversation.scrollTop = txtConversation.scrollHeight;
+                // if (message.from !== $scope.username) {
+                //     playSoundMessage();
+                //     if (!document.hasFocus()) {
+                //         var notificationMsg = new NotificationMsg(message,"new_msg");
+                //         // showMsgInNotif(notificationMsg);
+                //     }
+                // }
+
+                if (message.from !== $scope.username) {
+                	playSoundMessage();
+                	receiveNewMessage(message.text, message.from, convertDateTime(message.date));
+                }else{
+                	sendNewMessage(message.text, convertDateTime(message.date));
+                }
+
+            }
+
+            // Cette fonction ajoute les messages de status (joined et left) dans la page
+            function addStatusMessage(message) {
+                var slctUsers = document.getElementById('slctUsers');
+                // resetSelectedOption(slctUsers);
+                var option = document.createElement("option");
+
+                if (message.username === $scope.user.username) {
+                    option.innerHTML = "You Have Just " + message.type + " ChitChat";
+                } else {
+                    var type = "";
+                    if (message.type === "Joined") {
+                        playSoundJoin();
+                        type = "joined";
+                    }
+                    if (message.type === "Left") {
+                        playSoundLeft();
+                        type = "left";
+                    }
+                    option.innerHTML = message.username + " Has Just " + message.type + " ChitChat";
+                    var notificationMsg = new NotificationMsg(message, type);
+                    // showMsgInNotif(notificationMsg);
+                    option.setAttribute("data-toggle", "modal");
+                    option.setAttribute("data-target", "#sendEmailModal");
+                }
+                option.id = message.email;
+                // L'option est sélectionnée par default pour la laisser visible
+                // Au cas où la liste des utilisateurs et les évènements (joined et left) est longue
+                option.selected = true;
+                option.onclick = onOptionClickListener;
+                slctUsers.appendChild(option);
+            }
+
+            // Cette fonction permet de publier les messages instantanes
+            $scope.sendInstantMessage = function() {
+                var msgValue = $scope.instantMessage;
+                msgValue = msgValue.trim();
+                if (msgValue !== "") {
+                    var message = new Message($scope.user.username, msgValue);
+                    publishMessage(message);
+                }
+
+                $scope.instantMessage = "";
+            }
+
+            // Cette fonction est un Listener qui permet d'envoyer des messages instantanes quand on clique sur ENTER
+            $scope.sendInstantMessageOnEnter = function($event) {
+                event.preventDefault();
+                if (event.keyCode === 13) {
+                    $scope.sendInstantMessage();
+                }
+            }
+
+
+            function sendNewMessage(messageContent, messageTime) {
+				var messageBodyDiv = document.createElement('div');
+				messageBodyDiv.className = 'row message-body';
+
+				var messageMainSenderDiv = document.createElement('div');
+				messageMainSenderDiv.className = 'col-sm-12 message-main-sender';
+
+				var senderDiv = document.createElement('div');
+				senderDiv.className = 'sender';
+
+				var messageTextDiv = document.createElement('div');
+				messageTextDiv.className = 'message-text';
+
+				var content = document.createTextNode(messageContent);
+
+				var messageTimeSpan = document.createElement('span');
+				messageTimeSpan.className = 'message-time pull-right';
+
+				var messageTimeSpanContent = document.createTextNode(messageTime);
+
+				messageTimeSpan.appendChild(messageTimeSpanContent);
+
+				messageTextDiv.appendChild(content);
+				senderDiv.appendChild(messageTextDiv);
+				senderDiv.appendChild(messageTimeSpan);
+				messageMainSenderDiv.appendChild(senderDiv);
+				messageBodyDiv.appendChild(messageMainSenderDiv);
+
+				var conversationSection = document.getElementById('conversation');
+				conversationSection.appendChild(messageBodyDiv);
+
+				scrollConversationSection();
+			}
+
+			function receiveNewMessage(messageContent, sender, messageTime) {
+				var messageBodyDiv = document.createElement('div');
+				messageBodyDiv.className = 'row message-body';
+
+				var messageMainSenderDiv = document.createElement('div');
+				messageMainSenderDiv.className = 'col-sm-12 message-main-receiver';
+
+				var senderDiv = document.createElement('div');
+				senderDiv.className = 'receiver';
+
+				var senderNameSpan = document.createElement('span');
+				senderNameSpan.className = 'sender-name';
+				senderNameSpan.innerHTML = sender;
+
+				var messageTextDiv = document.createElement('div');
+				messageTextDiv.className = 'message-text';
+
+				var content = document.createTextNode(messageContent);
+
+				var messageTimeSpan = document.createElement('span');
+				messageTimeSpan.className = 'message-time pull-right';
+
+				var messageTimeSpanContent = document.createTextNode(messageTime);
+
+				messageTimeSpan.appendChild(messageTimeSpanContent);
+
+				messageTextDiv.appendChild(content);
+				senderDiv.appendChild(senderNameSpan);
+				senderDiv.appendChild(messageTextDiv);
+				senderDiv.appendChild(messageTimeSpan);
+				messageMainSenderDiv.appendChild(senderDiv);
+				messageBodyDiv.appendChild(messageMainSenderDiv);
+
+				var conversationSection = document.getElementById('conversation');
+				conversationSection.appendChild(messageBodyDiv);
+
+				scrollConversationSection();
+			}
+
+			function scrollConversationSection() {
+				var conversationWrapper = document.getElementById('conversation-wrapper');
+				conversationWrapper.scrollTop = conversationWrapper.scrollHeight;
+			}
+
+
+
+
+
+
+
+			
+
+
+
+
+
+			// Classe FileMessage
+			function FileMessage(from, file, fileData) {
+				
+				this.from = from;
+				this.date = new Date();
+
+				if (!window.FileReader) {
+					console.log("The file API isn't supported on this browser yet.");
+					return;
+				}
+				this.fileName = file.name;
+				this.fileData = fileData;
+				this.fileType = file.type;
+				this.fileSize = file.size;
+			}
+
+			// Fonction de la Class Message - toJson
+			FileMessage.prototype.toJson = function () {
+				var json = {
+					"from": this.from,
+					"fileName": this.fileName,
+					"fileData": this.fileData,
+					"fileType": this.fileType,
+					"fileSize": this.fileSize,
+					"date": this.date
+				};
+				return json;
+			};
+
+
+
+			$scope.sendFile = function(){
+				var input, file;
+				input = document.getElementById('fileinput');
+
+				if (!window.FileReader) {
+					alert("The file API isn't supported on this browser yet.");
+					return;
+				} else if (!input.files) {
+					alert("This browser doesn't seem to support the `files` property of file inputs.");
+					return;
+				} else if (!input.files[0]) {
+					alert("Please select a file before clicking 'Load'");
+					return;
+				}else {
+					file = input.files[0];
+					// console.log(file);
+					var reader = new FileReader();
+					reader.readAsDataURL(file);
+					
+					reader.onload = function () {
+						var fileMsg = new FileMessage($scope.username, file, reader.result);
+						publishMessage(fileMsg);
+					};
+
+					reader.onerror = function (error) {
+						console.log('Error: ' + error);
+					};
+				}
+			}
+
+			function receiveFileMessage(fileMsg){
+				var messageBodyDiv = document.createElement('div');
+				messageBodyDiv.className = 'row message-body';
+
+				var messageMainSenderDiv = document.createElement('div');
+				messageMainSenderDiv.className = 'col-sm-12 message-main-receiver';
+
+				var senderDiv = document.createElement('div');
+				senderDiv.className = 'receiver';
+
+				var senderNameSpan = document.createElement('span');
+				senderNameSpan.className = 'sender-name';
+				senderNameSpan.innerHTML = fileMsg.from;
+
+				var messageTextDiv = document.createElement('div');
+				messageTextDiv.className = 'message-text';
+
+				var content = document.createElement('a');
+				content.href = fileMsg.fileData;
+				content.target = '_blank';
+				content.innerHTML = fileMsg.fileName;
+				content.download = fileMsg.fileName;
+
+				var messageTimeSpan = document.createElement('span');
+				messageTimeSpan.className = 'message-time pull-right';
+
+				var messageTimeSpanContent = document.createTextNode(convertDateTime(fileMsg.date));
+
+				messageTimeSpan.appendChild(messageTimeSpanContent);
+
+				messageTextDiv.appendChild(content);
+				senderDiv.appendChild(senderNameSpan);
+				senderDiv.appendChild(messageTextDiv);
+				senderDiv.appendChild(messageTimeSpan);
+				messageMainSenderDiv.appendChild(senderDiv);
+				messageBodyDiv.appendChild(messageMainSenderDiv);
+
+				var conversationSection = document.getElementById('conversation');
+				conversationSection.appendChild(messageBodyDiv);
+
+				scrollConversationSection();
+			}
+
+
+			function addReceivedFileMessage(message) {
+                if (message.from !== $scope.username) {
+                	playSoundMessage();
+                	receiveFileMessage(message);
+                }else{
+                	receiveFileMessage(message);
+                }
+
+            }
+
+
+
+		});
+	</script>
+</body>
+</html>
